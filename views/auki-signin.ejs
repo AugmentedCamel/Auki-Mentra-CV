@@ -1,0 +1,234 @@
+﻿<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content">
+    <title>Auki Network - Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .error-shake {
+            animation: shake 0.5s ease-in-out;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .logo svg {
+            height: 48px;
+            width: auto;
+            display: block;
+        }
+        :root {
+            color-scheme: dark;
+        }
+        html, body {
+            background: #000;
+            height: 100%;
+            -webkit-text-size-adjust: 100%;
+        }
+        body {
+            min-height: 100dvh;
+            height: 100dvh;
+            overscroll-behavior: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        input, button {
+            font-size: 16px; /* avoid iOS input zoom */
+        }
+    </style>
+</head>
+<body class="min-h-[100dvh] h-[100dvh] bg-black text-white flex items-center justify-center p-4 overscroll-none">
+    <div class="w-full max-w-md space-y-8">
+        <!-- Logo and Header -->
+        <div class="text-center space-y-4">
+            <div class="flex justify-center">
+                <div class="logo">
+                    <%- include('logo.svg') %>
+                </div>
+            </div>
+            <div class="space-y-2">
+                <h1 class="text-2xl font-semibold text-balance">The spatial network for smart glasses</h1>
+                <p class="text-gray-400 text-sm text-pretty">Connect to the Auki Network to use Auki compute nodes and access the network.</p>
+            </div>
+        </div>
+
+        <!-- Login Form -->
+        <form id="loginForm" class="space-y-6">
+            <div class="space-y-4">
+                <!-- Email Field -->
+                <div class="space-y-2">
+                    <label for="email" class="block text-sm font-medium text-gray-300">Email</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email"
+                        required
+                        class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors"
+                        placeholder="Enter your email"
+                    >
+                    <div id="emailError" class="text-red-400 text-sm hidden"></div>
+                </div>
+
+                <!-- Password Field -->
+                <div class="space-y-2">
+                    <label for="password" class="block text-sm font-medium text-gray-300">Password</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password"
+                        required
+                        class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors"
+                        placeholder="Enter your password"
+                    >
+                    <div id="passwordError" class="text-red-400 text-sm hidden"></div>
+                </div>
+
+                <!-- Save Email Checkbox -->
+                <div class="flex items-center">
+                    <input 
+                        type="checkbox" 
+                        id="saveEmail" 
+                        name="saveEmail"
+                        class="h-4 w-4 text-white bg-gray-900 border-gray-700 rounded focus:ring-white focus:ring-2"
+                    >
+                    <label for="saveEmail" class="ml-2 text-sm text-gray-300">Save Email</label>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <button 
+                type="submit" 
+                id="submitBtn"
+                class="w-full bg-white text-black py-2 px-4 rounded-md font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            >
+                <span id="submitText">Sign In</span>
+                <svg id="loadingSpinner" class="hidden ml-2 h-4 w-4 loading-spinner" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </button>
+
+            <!-- Links -->
+            <div class="flex justify-between text-sm">
+                <a href="#" id="forgotPassword" class="text-gray-400 hover:text-white transition-colors">Forgot Password?</a>
+                <a href="#" id="resetClientCode" class="text-gray-400 hover:text-white transition-colors">Reset Client Code</a>
+            </div>
+
+            <!-- General Error Message -->
+            <div id="generalError" class="text-red-400 text-sm text-center hidden"></div>
+        </form>
+    </div>
+
+    <script>
+        // Elements
+        const form = document.getElementById('loginForm');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const saveEmailCheckbox = document.getElementById('saveEmail');
+        const submitBtn = document.getElementById('submitBtn');
+        const submitText = document.getElementById('submitText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const generalError = document.getElementById('generalError');
+
+        // Load saved email on page load
+        window.addEventListener('load', function() {
+            const savedEmail = localStorage.getItem('savedEmail');
+            if (savedEmail) {
+                emailInput.value = savedEmail;
+                saveEmailCheckbox.checked = true;
+            }
+        });
+
+        // UI helpers
+        function showGeneralError(message) {
+            generalError.textContent = message;
+            generalError.classList.remove('hidden');
+        }
+        function hideGeneralError() {
+            generalError.classList.add('hidden');
+        }
+        function setLoading(loading) {
+            if (loading) {
+                submitBtn.disabled = true;
+                submitText.textContent = 'Signing In...';
+                loadingSpinner.classList.remove('hidden');
+            } else {
+                submitBtn.disabled = false;
+                submitText.textContent = 'Sign In';
+                loadingSpinner.classList.add('hidden');
+            }
+        }
+
+        // Authenticate with Auki Network (email/password)
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            hideGeneralError();
+            setLoading(true);
+
+            // Optionally persist email preference
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+            if (saveEmailCheckbox.checked && email) {
+                localStorage.setItem('savedEmail', email);
+            } else {
+                localStorage.removeItem('savedEmail');
+            }
+
+            try {
+                const resp = await fetch('/api/auki/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ email, password })
+                });
+
+                if (!resp.ok) {
+                    const data = await resp.json().catch(() => ({}));
+                    const message = data?.detail || data?.error || 'Unable to authenticate. Make sure you opened this page from Mentra.';
+                    throw new Error(message);
+                }
+
+                // Redirect to main webview after successful auth
+                window.location.href = '/webview';
+            } catch (err) {
+                showGeneralError(err.message || 'Login failed. Please try again.');
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        // Link handlers (optional demo)
+        document.getElementById('forgotPassword').addEventListener('click', function(e) {
+            e.preventDefault();
+            alert('Forgot Password functionality would be implemented here');
+        });
+        document.getElementById('resetClientCode').addEventListener('click', function(e) {
+            e.preventDefault();
+            alert('Reset Client Code functionality would be implemented here');
+        });
+    </script>
+</body>
+</html>

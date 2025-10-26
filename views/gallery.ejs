@@ -1,0 +1,212 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gallery</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content">
+  <style>
+    :root { color-scheme: dark; }
+    html, body {
+      height: 100%;
+      background: #0b0b0b;
+      color: #eaeaea;
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Inter, Helvetica, Arial, sans-serif;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(6px);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      z-index: 10;
+    }
+    .btn {
+      background: #1e88e5;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn.secondary {
+      background: #2b2b2b;
+      color: #eaeaea;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .content {
+      padding: 16px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .card {
+      background: #121212;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+    }
+    .thumb {
+      width: 100%;
+      aspect-ratio: 4/3;
+      object-fit: cover;
+      display: block;
+      background: #0e0e0e;
+    }
+    .card-body {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .meta {
+      font-size: 12px;
+      color: #aaa;
+    }
+    .prompt {
+      font-size: 13px;
+      color: #ddd;
+    }
+    .response {
+      font-size: 14px;
+      color: #f3f3f3;
+      white-space: pre-wrap;
+    }
+    .empty {
+      padding: 32px;
+      text-align: center;
+      color: #bbb;
+    }
+  </style>
+</head>
+<body>
+<div id="errorToasts" style="position:fixed; top:12px; left:12px; z-index:9999; display:flex; flex-direction:column; gap:8px;"></div>
+<header>
+  <button class="btn secondary" onclick="history.back()">← Back</button>
+  <a class="btn" href="#" id="refreshBtn">↻ Refresh</a>
+  <div style="margin-left:auto; opacity:0.8;">Gallery: last 6 results</div>
+</header>
+<div class="content">
+  <div id="status" class="empty">Loading your last 6 entries…</div>
+  <div id="grid" class="grid" style="display:none;"></div>
+</div>
+
+<script>
+  let isLoading = false;
+
+  // Error toasts via SSE
+  (function initErrorSSE() {
+    try {
+      const es = new EventSource('/errors/stream');
+      es.onmessage = function (ev) {
+        try {
+          const d = JSON.parse(ev.data || '{}');
+          showErrorToast(d.source ? `[${d.source}] ${d.message || ''}` : (d.message || 'An error occurred'));
+        } catch {}
+      };
+      es.onerror = function () {};
+    } catch {}
+  })();
+
+  function showErrorToast(text) {
+    if (!text) return;
+    const host = document.getElementById('errorToasts');
+    if (!host) return;
+    const el = document.createElement('div');
+    el.textContent = String(text);
+    el.style.cssText = 'background:rgba(255,64,64,0.9); color:#fff; padding:8px 10px; border-radius:8px; font-size:13px; box-shadow:0 2px 8px rgba(0,0,0,0.4); max-width:70vw;';
+    host.appendChild(el);
+    setTimeout(() => {
+      el.style.transition = 'opacity 200ms ease';
+      el.style.opacity = '0';
+      setTimeout(() => host.removeChild(el), 220);
+    }, 4000);
+  }
+
+  async function loadItems() {
+    if (isLoading) return;
+    isLoading = true;
+    const refreshBtn = document.getElementById('refreshBtn');
+    refreshBtn.disabled = true;
+
+    const status = document.getElementById('status');
+    const grid = document.getElementById('grid');
+    status.textContent = 'Loading your last 6 entries…';
+    status.style.display = 'block';
+    grid.style.display = 'none';
+    grid.innerHTML = '';
+
+    try {
+      const resp = await fetch('/api/auki/qna/list?limit=6', { credentials: 'include' });
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(txt || ('HTTP ' + resp.status));
+      }
+      const json = await resp.json();
+      const items = Array.isArray(json.items) ? json.items : [];
+
+      if (!items.length) {
+        status.textContent = 'No items yet. Take a photo and ask a question!';
+        return;
+      }
+
+      for (const it of items) {
+        const created = new Date(it.createdAt || Date.now());
+        const el = document.createElement('div');
+        el.className = 'card';
+        el.innerHTML = `
+          <img class="thumb" src="${it.imageUrl}" alt="thumbnail"/>
+          <div class="card-body">
+            <div class="meta">${created.toLocaleString()}</div>
+            <div class="prompt"><strong>Prompt:</strong> ${escapeHtml(it.prompt || '')}</div>
+            <div class="response"><strong>Response:</strong> ${escapeHtml(it.response || '')}</div>
+          </div>
+        `;
+        grid.appendChild(el);
+      }
+
+      status.style.display = 'none';
+      grid.style.display = 'grid';
+    } catch (e) {
+      console.error(e);
+      status.textContent = 'Failed to load gallery. Please try again.';
+    } finally {
+      isLoading = false;
+      refreshBtn.disabled = false;
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  document.getElementById('refreshBtn').addEventListener('click', (ev) => {
+    ev.preventDefault();
+    loadItems();
+  });
+
+  loadItems();
+</script>
+</body>
+</html>

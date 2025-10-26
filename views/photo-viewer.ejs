@@ -1,0 +1,690 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content">
+    <title>Photo Viewer</title>
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+        html, body {
+            height: 100%;
+            background-color: #000;
+            -webkit-text-size-adjust: 100%;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100dvh;
+            min-height: 100dvh;
+            font-family: Arial, sans-serif;
+            overscroll-behavior: none;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+
+        .photo-container {
+            max-width: 100vw;
+            max-height: 100dvh;
+            height: 100dvh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .photo-stage {
+            position: relative;
+            display: inline-block;
+            line-height: 0;
+            max-width: 100vw;
+            max-height: 100dvh;
+        }
+
+        .photo {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 8px;
+            display: block;
+        }
+
+        .overlay-text {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            padding: 12px 16px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            border-radius: 12px;
+            font-size: 20px;
+            line-height: 1.4;
+            max-width: calc(100vw - 64px);
+            white-space: pre-wrap;
+            word-break: break-word;
+            text-overflow: unset;
+            overflow: visible;
+            backdrop-filter: blur(2px);
+            pointer-events: none;
+        }
+
+        .no-photo {
+            color: white;
+            text-align: center;
+            font-size: 18px;
+        }
+
+        .loading {
+            color: white;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        .spinner {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top: 2px solid rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .timer {
+            position: absolute;
+            top: 44px;
+            right: 16px;
+            padding: 4px 8px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            border-radius: 8px;
+            font-size: 14px;
+            backdrop-filter: blur(2px);
+        }
+        .timer.completed {
+            color: #4caf50;
+        }
+
+        .controls-panel {
+            position: fixed;
+            bottom: 16px;
+            left: 16px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px;
+            padding: 10px 12px;
+            backdrop-filter: blur(2px);
+            z-index: 10;
+        }
+
+        .question-input {
+            width: min(60vw, 480px);
+            max-width: 75vw;
+            color: #fff;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            padding: 8px 10px;
+            outline: none;
+            font-size: 16px; /* avoid iOS input zoom */
+        }
+        .question-input.disabled {
+            color: #aaa;
+            background: rgba(255,255,255,0.08);
+        }
+
+        .toggle-btn {
+            background: #1e88e5;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 16px; /* avoid iOS zoom */
+        }
+        .toggle-btn.save {
+            background: #43a047;
+        }
+
+        .topbar {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            z-index: 20;
+        }
+        .topbar .toggle-btn {
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+<div id="errorToasts" style="position:fixed; top:12px; left:12px; z-index:9999; display:flex; flex-direction:column; gap:8px;"></div>
+<div class="topbar">
+    <a id="openGalleryBtn" class="toggle-btn" href="/gallery" style="text-decoration:none; display:inline-flex; align-items:center;">Open gallery</a>
+    <a class="toggle-btn" href="/settings" style="text-decoration:none; display:inline-flex; align-items:center;">Settings</a>
+</div>
+<div class="photo-container">
+    <div id="content" class="loading">
+        Loading latest photo...
+    </div>
+
+    <!-- Controls panel is always visible, independent of photo availability -->
+    <div id="controls" class="controls-panel">
+        <input id="questionInput" class="question-input disabled" type="text"
+               placeholder="Type your question…"
+               autocomplete="off" disabled />
+        <button id="toggleEditBtn" class="toggle-btn" type="button">Edit question</button>
+        <button id="stopTtsBtn" class="toggle-btn" type="button" style="background:#e53935;">Stop TTS</button>
+    </div>
+</div>
+
+<script>
+    // Error toasts via SSE
+    (function initErrorSSE() {
+      try {
+        const es = new EventSource('/errors/stream');
+        es.onmessage = function (ev) {
+          try {
+            const d = JSON.parse(ev.data || '{}');
+            showErrorToast(d.source ? `[${d.source}] ${d.message || ''}` : (d.message || 'An error occurred'));
+          } catch {
+            // ignore
+          }
+        };
+        es.onerror = function () {
+          // drop; SSE will auto-reconnect
+        };
+      } catch {}
+    })();
+
+    // Instant analysis updates via SSE (final responses only)
+    (function initAnalysisSSE() {
+      try {
+        const es = new EventSource('/analysis/stream');
+        es.onmessage = function (ev) {
+          try {
+            const d = JSON.parse(ev.data || '{}');
+            const rid = d && d.requestId;
+            const text = d && d.text;
+            if (typeof text === 'string' && text.trim()) {
+              // If request id matches current (or is 'latest'), show it
+              if (!rid || rid === 'latest' || rid === currentRequestId) {
+                setOverlayText(String(text));
+              }
+            }
+          } catch {
+            // ignore malformed events
+          }
+        };
+        es.onerror = function () {
+          // auto-reconnect; polling remains as fallback
+        };
+      } catch {}
+    })();
+
+    // Instant photo updates via SSE
+    (function initPhotoSSE() {
+      try {
+        const es = new EventSource('/photo/stream');
+        es.onmessage = function (ev) {
+          try {
+            const d = JSON.parse(ev.data || '{}');
+            const reqId = d.requestId;
+            if (reqId && reqId !== currentRequestId) {
+              currentRequestId = reqId;
+              renderPhotoStage(reqId);
+              startAnalysisPolling(reqId);
+            }
+          } catch {
+            // ignore
+          }
+        };
+        es.onerror = function () {
+          // auto-reconnect
+        };
+      } catch {}
+    })();
+
+    function showErrorToast(text) {
+      if (!text) return;
+      const host = document.getElementById('errorToasts');
+      if (!host) return;
+      const el = document.createElement('div');
+      el.textContent = String(text);
+      el.style.cssText = 'background:rgba(255,64,64,0.9); color:#fff; padding:8px 10px; border-radius:8px; font-size:13px; box-shadow:0 2px 8px rgba(0,0,0,0.4); max-width:70vw;';
+      host.appendChild(el);
+      setTimeout(() => {
+        el.style.transition = 'opacity 200ms ease';
+        el.style.opacity = '0';
+        setTimeout(() => host.removeChild(el), 220);
+      }, 4000);
+    }
+
+    let currentRequestId = null;
+    let overlayEl = null;
+    let analysisPollTimer = null;
+    let startTime = null;
+    let timerInterval = null;
+
+    // Controls: question input + toggle
+    const questionInput = document.getElementById('questionInput');
+    const toggleBtn = document.getElementById('toggleEditBtn');
+    let isEditing = false;
+
+    // Initialize question input from localStorage or default (run once)
+    (function initQuestion() {
+        try {
+            const saved = localStorage.getItem('mauki.question');
+            if (saved && typeof saved === 'string') {
+                questionInput.value = saved;
+            } else {
+                questionInput.value = 'Describe what you see in technical terms';
+            }
+        } catch {
+            questionInput.value = 'Describe what you see in technical terms';
+        }
+        // Also attempt to prefill from server-side CV pipeline (authoritative)
+        // Non-blocking; ignore errors
+        fetch('/api/cv/query', { credentials: 'include' })
+          .then(r => r.ok ? r.json() : null)
+          .then(j => {
+            if (j && typeof j.query === 'string' && j.query.trim()) {
+              questionInput.value = j.query.trim();
+              try { localStorage.setItem('mauki.question', questionInput.value); } catch {}
+            }
+          })
+          .catch(() => {});
+    })();
+
+    function setQuestionEditing(state) {
+        isEditing = state;
+        if (state) {
+            questionInput.removeAttribute('disabled');
+            questionInput.classList.remove('disabled');
+            toggleBtn.textContent = 'Save question';
+            toggleBtn.classList.add('save');
+            questionInput.focus();
+            const len = questionInput.value.length;
+            questionInput.setSelectionRange(len, len);
+        } else {
+            questionInput.setAttribute('disabled', 'true');
+            questionInput.classList.add('disabled');
+            toggleBtn.textContent = 'Edit question';
+            toggleBtn.classList.remove('save');
+        }
+    }
+
+    toggleBtn.addEventListener('click', async () => {
+        if (!isEditing) {
+            setQuestionEditing(true);
+        } else {
+            const query = String(questionInput.value || '').trim();
+            if (!query) {
+                alert('Please enter a question first.');
+                return;
+            }
+            try {
+                const resp = await fetch(`/api/cv/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ query }),
+                });
+                if (!resp.ok) {
+                    const txt = await resp.text();
+                    throw new Error(txt || `HTTP ${resp.status}`);
+                }
+                try { localStorage.setItem('mauki.question', query); } catch {}
+                setQuestionEditing(false);
+                // Optional: brief feedback in overlay
+                setOverlayText('Query updated.');
+                setTimeout(() => setOverlayText(''), 1500);
+            } catch (e) {
+                console.error('Failed to update query', e);
+                alert('Failed to update the question. Please try again.');
+            }
+        }
+    });
+
+    // Stop TTS button
+    (function initStopTTS() {
+      try {
+        const btn = document.getElementById('stopTtsBtn');
+        if (!btn) return;
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          const prev = btn.textContent;
+          btn.textContent = 'Stopping…';
+          try {
+            const resp = await fetch('/audio/stop', { method: 'POST', credentials: 'include' });
+            if (!resp.ok) {
+              console.warn('Failed to stop audio', await resp.text());
+            }
+          } catch (e) {
+            console.warn('Stop TTS error', e);
+          } finally {
+            btn.textContent = prev;
+            btn.disabled = false;
+          }
+        });
+      } catch {}
+    })();
+
+    // Start with editing disabled
+    setQuestionEditing(false);
+
+    /**
+     * Render the photo stage with overlay
+     */
+    function renderPhotoStage(requestId) {
+        const content = document.getElementById('content');
+        content.innerHTML = `
+            <div class="photo-stage">
+                <img id="photoImg" class="photo" src="/api/photo/${requestId}" alt="Latest Photo" />
+                <div id="overlayText" class="overlay-text" style="display:none;"></div>
+                <div id="analysisSpinner" class="spinner" style="display:none;"></div>
+                <div id="analysisTimer" class="timer" style="display:none;"></div>
+            </div>
+        `;
+        overlayEl = document.getElementById('overlayText');
+    }
+
+    /**
+     * Set overlay text programmatically
+     */
+    function setOverlayText(text) {
+        if (!overlayEl) {
+            overlayEl = document.getElementById('overlayText');
+        }
+        if (!overlayEl) return;
+        if (text) {
+            overlayEl.textContent = String(text);
+            overlayEl.style.display = 'block';
+        } else {
+            overlayEl.textContent = '';
+            overlayEl.style.display = 'none';
+        }
+        // Stop timer if running and text is set
+        if (text && timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            updateTimer(); // Update to final time
+            const timerEl = document.getElementById('analysisTimer');
+            if (timerEl) {
+                timerEl.classList.add('completed');
+            }
+            setSpinnerVisible(false);
+        }
+    }
+
+    /**
+     * Set spinner visibility
+     */
+    function setSpinnerVisible(visible) {
+        const spinner = document.getElementById('analysisSpinner');
+        if (spinner) {
+            spinner.style.display = visible ? 'block' : 'none';
+        }
+    }
+
+    /**
+     * Set timer visibility
+     */
+    function setTimerVisible(visible) {
+        const timer = document.getElementById('analysisTimer');
+        if (timer) {
+            timer.style.display = visible ? 'block' : 'none';
+        }
+    }
+
+    /**
+     * Update timer display
+     */
+    function updateTimer() {
+        if (!startTime) return;
+        const elapsed = (Date.now() - startTime) / 1000;
+        const timer = document.getElementById('analysisTimer');
+        if (timer) {
+            timer.textContent = elapsed.toFixed(1) + 's';
+        }
+    }
+
+    // Expose helpers for future Mauki responses
+    window.Mauki = window.Mauki || {};
+    window.Mauki.setOverlayText = setOverlayText;
+    window.Mauki.applyMaukiResponse = function(resp) {
+        try {
+            const answer = resp && (resp.answer ?? resp.result ?? resp.text ?? resp.output);
+            if (answer !== undefined && answer !== null && String(answer).length > 0) {
+                setOverlayText(String(answer));
+            }
+        } catch (e) {
+            console.warn('Failed to apply Mauki response:', e);
+        }
+    };
+
+    async function fetchAnalysisOnce(requestId) {
+        try {
+            const resp = await fetch(`/api/photo-analysis/${requestId}`, { credentials: 'include' });
+            if (resp.ok) {
+                const json = await resp.json();
+                const text = json?.text ?? json?.result ?? json?.answer ?? json?.output;
+                if (requestId === currentRequestId && text !== undefined && text !== null) {
+                    setOverlayText(String(text));
+                    if (analysisPollTimer) {
+                        clearInterval(analysisPollTimer);
+                        analysisPollTimer = null;
+                    }
+                }
+            }
+        } catch (e) {
+            // ignore; retry on next tick
+        }
+    }
+
+    function startAnalysisPolling(requestId) {
+        // Clear any existing polling
+        if (analysisPollTimer) {
+            clearInterval(analysisPollTimer);
+            analysisPollTimer = null;
+        }
+        // Clear any existing timer
+        if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+        }
+        setTimerVisible(false);
+        // Clear overlay text while waiting for new analysis
+        setOverlayText('');
+        // Show spinner
+        setSpinnerVisible(true);
+        // Start timer
+        startTime = Date.now();
+        setTimerVisible(true);
+        timerInterval = setInterval(updateTimer, 100);
+
+        // Adaptive backoff polling (due to ngrok limits)
+        // TODO(ngrok): lower delays when not hosted behind ngrok
+        let delayMs = 3000;
+        const MIN_MS = 3000;
+        const MAX_MS = 15000;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 5;
+
+        const tick = async () => {
+            if (requestId !== currentRequestId) {
+                setSpinnerVisible(false); // hide if switched
+                return; // stop if switched to a different photo
+            }
+            try {
+                const resp = await fetch(`/api/photo-analysis/${requestId}`, { credentials: 'include' });
+                if (resp.status === 429) {
+                    const ra = parseInt(resp.headers.get('Retry-After') || '0', 10);
+                    const wait = Number.isFinite(ra) && ra > 0 ? ra * 1000 : delayMs;
+                    delayMs = Math.min(Math.max(wait, MIN_MS), MAX_MS);
+                } else if (resp.ok) {
+                    const json = await resp.json();
+                    const text = json?.text ?? json?.result ?? json?.answer ?? json?.output;
+                    if (requestId === currentRequestId && text !== undefined && text !== null) {
+                        setOverlayText(String(text));
+                        setSpinnerVisible(false); // hide on success
+                        if (timerInterval) {
+                            clearInterval(timerInterval);
+                            timerInterval = null;
+                        }
+                        const timer = document.getElementById('analysisTimer');
+                        if (timer) {
+                            timer.classList.add('completed');
+                        }
+                        return; // stop polling on success
+                    }
+                    // no text yet, backoff a bit
+                    delayMs = Math.min(Math.floor(delayMs * 1.5), MAX_MS);
+                } else {
+                    // other errors, backoff more
+                    attempts++;
+                    delayMs = Math.min(Math.floor(delayMs * 2), MAX_MS);
+                }
+            } catch {
+                attempts++;
+                delayMs = Math.min(Math.floor(delayMs * 2), MAX_MS);
+            }
+            if (attempts > MAX_ATTEMPTS) {
+                setSpinnerVisible(false); // hide on max attempts
+                setTimerVisible(false);
+                if (timerInterval) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                }
+                return; // stop polling due to errors
+            }
+            analysisPollTimer = setTimeout(tick, delayMs);
+        };
+
+        tick(); // start
+    }
+
+    /**
+     * Check for new photos and update display using adaptive backoff.
+     * We also honor server 429 Retry-After to avoid exceeding ngrok caps.
+     * TODO(ngrok): lower delays when not hosted behind ngrok
+     */
+    let photoPollTimer = null;
+    let photoPollDelay = 3000; // start at 3s
+    const PHOTO_MIN_MS = 3000;
+    const PHOTO_MAX_MS = 15000;
+
+    function scheduleNextPhotoPoll(ms) {
+        if (photoPollTimer) {
+            clearTimeout(photoPollTimer);
+            photoPollTimer = null;
+        }
+        photoPollDelay = Math.min(Math.max(ms, PHOTO_MIN_MS), PHOTO_MAX_MS);
+        photoPollTimer = setTimeout(checkForNewPhoto, photoPollDelay);
+    }
+
+    async function checkForNewPhoto() {
+        try {
+            const response = await fetch('/api/latest-photo', { credentials: 'include' });
+
+            if (response.status === 429) {
+                const ra = parseInt(response.headers.get('Retry-After') || '0', 10);
+                const wait = Number.isFinite(ra) && ra > 0 ? ra * 1000 : photoPollDelay;
+                scheduleNextPhotoPoll(wait);
+                return;
+            }
+
+            if (response.status === 404) {
+                // No photo available; if we have never shown one, show hint.
+                if (!currentRequestId) {
+                    document.getElementById('content').innerHTML =
+                        '<div class="no-photo">No photos taken yet. Take a photo using your Mentra Live by pressing the right button!</div>';
+                    overlayEl = null;
+                    if (analysisPollTimer) {
+                        clearTimeout(analysisPollTimer);
+                        analysisPollTimer = null;
+                    }
+                }
+                // back off
+                scheduleNextPhotoPoll(Math.min(Math.floor(photoPollDelay * 1.5), PHOTO_MAX_MS));
+                return;
+            }
+
+            if (!response.ok) {
+                // other error: back off more
+                scheduleNextPhotoPoll(Math.min(Math.floor(photoPollDelay * 2), PHOTO_MAX_MS));
+                return;
+            }
+
+            const photoInfo = await response.json();
+            const reqId = photoInfo?.requestId;
+
+            // If the server didn't provide a requestId:
+            // - If we've never shown an image, show a hint.
+            // - If we already have an image, keep showing it until a new one arrives.
+            if (!reqId) {
+                if (!currentRequestId) {
+                    document.getElementById('content').innerHTML =
+                        '<div class="no-photo">No photos taken yet. Take a photo using your Mentra Live by pressing the right button!</div>';
+                    overlayEl = null;
+                    if (analysisPollTimer) {
+                        clearTimeout(analysisPollTimer);
+                        analysisPollTimer = null;
+                    }
+                }
+                scheduleNextPhotoPoll(Math.min(Math.floor(photoPollDelay * 1.5), PHOTO_MAX_MS));
+                return;
+            }
+
+            // Render new photo only when requestId changes; otherwise keep showing the current one.
+            if (reqId !== currentRequestId) {
+                currentRequestId = reqId;
+
+                // Render the photo stage (image + overlay)
+                renderPhotoStage(reqId);
+
+                // Start polling for analysis for this new photo
+                startAnalysisPolling(reqId);
+
+                // After a new photo, poll a bit sooner next time
+                scheduleNextPhotoPoll(PHOTO_MIN_MS);
+            } else {
+                // Same photo; back off gradually
+                scheduleNextPhotoPoll(Math.min(Math.floor(photoPollDelay * 1.5), PHOTO_MAX_MS));
+            }
+        } catch (error) {
+            console.error('Error checking for new photo:', error);
+            document.getElementById('content').innerHTML =
+                '<div class="no-photo">Error loading photo. Please refresh the page.</div>';
+            overlayEl = null;
+            if (analysisPollTimer) {
+                clearTimeout(analysisPollTimer);
+                analysisPollTimer = null;
+            }
+            // back off on errors
+            scheduleNextPhotoPoll(Math.min(Math.floor(photoPollDelay * 2), PHOTO_MAX_MS));
+        }
+    }
+
+    // Kick off adaptive polling
+    checkForNewPhoto();
+</script>
+</body>
+</html>

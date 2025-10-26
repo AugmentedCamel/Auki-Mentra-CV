@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content">
+    <title>Auki Network - Settings</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .error-shake {
+            animation: shake 0.5s ease-in-out;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .logo svg {
+            height: 48px;
+            width: auto;
+            display: block;
+        }
+        :root {
+            color-scheme: dark;
+        }
+        html, body {
+            background: #000;
+            height: 100%;
+            -webkit-text-size-adjust: 100%;
+        }
+        body {
+            min-height: 100dvh;
+            height: 100dvh;
+            overscroll-behavior: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        input, button {
+            font-size: 16px; /* avoid iOS input zoom */
+        }
+    </style>
+</head>
+<body class="min-h-[100dvh] h-[100dvh] bg-black text-white flex items-center justify-center p-4 overscroll-none">
+    <div class="w-full max-w-md space-y-8">
+        <!-- Logo and Header -->
+        <div class="text-center space-y-4">
+            <div class="flex justify-center">
+                <div class="logo">
+                    <%- include('logo.svg') %>
+                </div>
+            </div>
+            <div class="space-y-2">
+                <h1 class="text-2xl font-semibold text-balance">Auki Network Settings</h1>
+                <p class="text-gray-400 text-sm text-pretty">Configure your settings for the Auki Network.</p>
+            </div>
+        </div>
+
+        <!-- Back to Viewer Button -->
+        <div class="text-center">
+            <a href="/webview" class="inline-block bg-gray-700 text-white py-2 px-4 rounded-md hover:bg-gray-600 transition-colors">Back to Viewer</a>
+        </div>
+
+        <!-- Settings Form -->
+        <form id="settingsForm" class="space-y-6">
+            <div class="space-y-4">
+                <!-- Domain ID Field -->
+                <div class="space-y-2">
+                    <label for="domainId" class="block text-sm font-medium text-gray-300">Domain ID</label>
+                    <input
+                        type="text"
+                        id="domainId"
+                        name="domainId"
+                        required
+                        pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                        class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-md text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-colors"
+                        placeholder="e.g., 0b88e10b-ea0c-488f-83a8-5c88ec84936f"
+                    >
+                    <div id="domainIdError" class="text-red-400 text-sm hidden"></div>
+                </div>
+
+                <!-- Use Local VLM Checkbox -->
+                <div class="flex items-center">
+                    <input
+                        type="checkbox"
+                        id="useLocalVlm"
+                        name="useLocalVlm"
+                        class="h-4 w-4 text-white bg-gray-900 border-gray-700 rounded focus:ring-white focus:ring-2"
+                    >
+                    <label for="useLocalVlm" class="ml-2 text-sm text-gray-300">Use fast websocket connection</label>
+                </div>
+
+                <!-- Use Cloud VLM Checkbox -->
+                <div class="flex items-center">
+                    <input
+                        type="checkbox"
+                        id="useCloudVlm"
+                        name="useCloudVlm"
+                        class="h-4 w-4 text-white bg-gray-900 border-gray-700 rounded focus:ring-white focus:ring-2"
+                    >
+                    <label for="useCloudVlm" class="ml-2 text-sm text-gray-300">Use cloud VLM</label>
+                </div>
+            </div>
+
+            <!-- Submit Button -->
+            <button
+                type="submit"
+                id="submitBtn"
+                class="w-full bg-white text-black py-2 px-4 rounded-md font-medium hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            >
+                <span id="submitText">Save Settings</span>
+                <svg id="loadingSpinner" class="hidden ml-2 h-4 w-4 loading-spinner" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </button>
+
+            <!-- General Message -->
+            <div id="generalError" class="text-red-400 text-sm text-center hidden"></div>
+        </form>
+    </div>
+
+    <script>
+        // Elements
+        const form = document.getElementById('settingsForm');
+        const domainIdInput = document.getElementById('domainId');
+        const useLocalVlmCheckbox = document.getElementById('useLocalVlm');
+        const useCloudVlmCheckbox = document.getElementById('useCloudVlm');
+        const submitBtn = document.getElementById('submitBtn');
+        const submitText = document.getElementById('submitText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const generalError = document.getElementById('generalError');
+        // Function to handle toggle interaction
+        function updateLocalVlmState() {
+            if (useCloudVlmCheckbox.checked) {
+                useLocalVlmCheckbox.checked = false;
+                useLocalVlmCheckbox.disabled = true;
+            } else {
+                useLocalVlmCheckbox.disabled = false;
+            }
+        }
+
+        // Load saved settings on page load
+        window.addEventListener('load', async function() {
+            try {
+                const response = await fetch('/api/auki/settings', {
+                    method: 'GET',
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.ok && data.settings) {
+                        const { domainId, processingMode } = data.settings;
+                        if (domainId) {
+                            domainIdInput.value = domainId;
+                        }
+                        if (processingMode) {
+                            useLocalVlmCheckbox.checked = processingMode === 'ws';
+                        }
+                        if (data.settings.useCloudVlm !== undefined) {
+                            useCloudVlmCheckbox.checked = data.settings.useCloudVlm;
+                        }
+                        console.log('Loaded settings:', { domainId, processingMode, useCloudVlm: data.settings.useCloudVlm });
+                        // Apply toggle interaction logic
+                        updateLocalVlmState();
+                    }
+                } else {
+                    console.error('Failed to load settings:', response.status);
+                }
+            } catch (error) {
+                console.error('Error loading settings:', error);
+            }
+        });
+
+        // Add change event listener to "Use cloud VLM" checkbox
+        useCloudVlmCheckbox.addEventListener('change', updateLocalVlmState);
+
+        // UI helpers
+        function showGeneralError(message, isSuccess = false) {
+            generalError.textContent = message;
+            generalError.classList.remove('hidden');
+            if (isSuccess) {
+                generalError.classList.remove('text-red-400');
+                generalError.classList.add('text-green-400');
+            } else {
+                generalError.classList.remove('text-green-400');
+                generalError.classList.add('text-red-400');
+            }
+        }
+        function hideGeneralError() {
+            generalError.classList.add('hidden');
+        }
+
+        // Save settings on form submit
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            hideGeneralError();
+
+            const domainId = domainIdInput.value.trim();
+            const useLocalVlm = useLocalVlmCheckbox.checked;
+            const useCloudVlm = useCloudVlmCheckbox.checked;
+
+            // Validate Domain ID as UUID
+            const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+            if (!uuidPattern.test(domainId)) {
+                showGeneralError('Invalid Domain ID format. Please enter a valid UUID.');
+                return;
+            }
+
+            // Map useLocalVlm to processingMode
+            const processingMode = useLocalVlm ? 'ws' : 'http';
+
+            try {
+                const response = await fetch('/api/auki/settings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        domainId,
+                        processingMode,
+                        useCloudVlm
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.ok) {
+                        console.log('Saved settings:', { domainId, processingMode, useCloudVlm });
+                        // Show success message
+                        showGeneralError('Settings saved successfully!', true);
+                    } else {
+                        showGeneralError('Failed to save settings.');
+                    }
+                } else {
+                    showGeneralError('Failed to save settings.');
+                }
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                showGeneralError('An error occurred while saving settings.');
+            }
+        });
+    </script>
+</body>
+</html>

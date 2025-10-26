@@ -1,0 +1,15 @@
+﻿<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Recordings</title>
+  </head>
+  <body>
+    <h1>Recordings</h1>
+    <ul>
+      <% (recordings || []).forEach(function(r){ %>
+        <li><a href="/recordings/<%= r.id %>"><%= r.name %></a></li>
+      <% }) %>
+    </ul>
+  </body>
+</html>
