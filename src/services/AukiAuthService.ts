@@ -256,4 +256,4 @@ export class AukiAuthService {
 
 // Vision Compute Node defaults (can be overridden per-user via settings endpoint)
 const AUKI_COMPUTE_NODE_URL = (process.env.AUKI_COMPUTE_NODE_URL || 'http://0.0.0.0:8080/api/v1/jobs').replace(/\/+$/, '');
-const AUKI_VLM_TASK_TYPE = process.env.AUKI_VLM_TASK_TYPE || 'task_timing_v1';
+const AUKI_VLM_TASK_TYPE = process.env.AUKI_VLM_TASK_TYPE || 'vlm_only';

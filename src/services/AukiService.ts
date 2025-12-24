@@ -226,10 +226,11 @@ export class AukiService {
     const url = settings.computeNodeUrl;
     const dataId = await this.waitForDataId(userId, photo.requestId, 4000).catch(() => undefined);
     const payload = {
-      job_type: settings.taskType || 'task_timing_v1',
+      job_type: 'vlm_only',
       query: { ids: dataId ? [dataId] : [] },
       domain_id: settings.domainId || '',
       input: {
+        job_type: 'vlm_only',
         prompt,
         webhook_url: `${process.env.MENTRA_APP_URL || ''}/cvnode/response`,
         vlm_prompt: prompt,
@@ -253,10 +254,10 @@ export class AukiService {
     const jobId =
       String(
         response.data?.jobId ??
-          response.data?.job_id ??
-          response.data?.id ??
-          response.data?.job?.id ??
-          ''
+        response.data?.job_id ??
+        response.data?.id ??
+        response.data?.job?.id ??
+        ''
       ) || 'unknown';
 
     // Track job context for webhook correlation
@@ -375,8 +376,8 @@ export class AukiService {
             typeof (req as any).body === 'string'
               ? (req as any).body
               : Buffer.isBuffer((req as any).body)
-              ? (req as any).body.toString('utf8')
-              : JSON.stringify(payload);
+                ? (req as any).body.toString('utf8')
+                : JSON.stringify(payload);
           const clipped = raw.length > 10_000 ? `${raw.slice(0, 10_000)}…[+${raw.length - 10_000} more bytes]` : raw;
           this.logger.info(`[CVNodeWebhook] payload.raw: ${clipped}`);
         } catch {
@@ -431,7 +432,7 @@ export class AukiService {
             const tprev = fromTemporal.length > 140 ? `${fromTemporal.slice(0, 140)}…` : fromTemporal;
             this.logger.info(`[CVNodeWebhook] temporal_output.preview: "${tprev}"`);
           }
-        } catch {}
+        } catch { }
 
         // Only use text extracted from logs (last CSV line's event)
         const textOut = (fromLogs || '').trim();
@@ -463,7 +464,7 @@ export class AukiService {
           this.analysisByUser.set(resolvedUserId, { requestId: resolvedRequestId, text: textOut, at: Date.now() });
           this.broadcastAnalysis(resolvedUserId, resolvedRequestId, textOut);
           // Persist to Q/A in background
-          this.saveQnAFor(resolvedUserId, resolvedRequestId).catch(() => {});
+          this.saveQnAFor(resolvedUserId, resolvedRequestId).catch(() => { });
         }
 
         // Always respond quickly to avoid retries; include parsed hints for debugging.
@@ -503,10 +504,10 @@ export class AukiService {
         await this.authService.login(userId, email, password);
 
         // Friendly voice feedback (optional)
-        await this.speak(userId, 'Auki authentication completed.', FeedbackPriority.Low).catch(() => {});
+        await this.speak(userId, 'Auki authentication completed.', FeedbackPriority.Low).catch(() => { });
 
         // Pre-mint domain auth for this user and schedule refresh
-        await this.authService.ensureDomainAuth(userId).catch(() => {});
+        await this.authService.ensureDomainAuth(userId).catch(() => { });
 
         // Warm up websocket for this user
         //this.initRealtimeConnection(userId);
@@ -702,7 +703,7 @@ export class AukiService {
           try {
             const cur = this.analysisSseClients.get(userId);
             if (cur) cur.delete(res);
-            try { res.end(); } catch {}
+            try { res.end(); } catch { }
           } catch { /* ignore */ }
         });
       } catch {
@@ -829,7 +830,7 @@ export class AukiService {
 
     // Respond to server pings to keep the connection alive (required for non-browser clients)
     ws.on('ping', (data: Buffer) => {
-      try { ws.pong(data); } catch {/* ignore */}
+      try { ws.pong(data); } catch {/* ignore */ }
     });
 
     ws.on('message', async (data: RawData) => {
@@ -878,7 +879,7 @@ export class AukiService {
             // try { await this.speak(userId, finalText, FeedbackPriority.High); } catch {/* ignore audio errors */}
 
             // Persist to Q/A store
-            this.saveQnAFor(userId, reqId).catch(() => {});
+            this.saveQnAFor(userId, reqId).catch(() => { });
           }
         }
       } catch (e: any) {
@@ -1226,7 +1227,7 @@ export class AukiService {
       let body = '';
       try {
         body = typeof e?.response?.data === 'string' ? e.response.data : JSON.stringify(e?.response?.data ?? {});
-      } catch {}
+      } catch { }
       throw new Error(`Domain store HTTP ${status ?? 'ERR'}: ${body || e?.message || 'unknown'}`);
     }
   }
