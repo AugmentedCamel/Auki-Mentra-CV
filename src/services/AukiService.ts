@@ -434,8 +434,8 @@ export class AukiService {
           }
         } catch { }
 
-        // Only use text extracted from logs (last CSV line's event)
-        const textOut = (fromLogs || '').trim();
+        // Prefer temporal_output (full response) over logs extraction (which can fail on multi-line CSV)
+        const textOut = (fromTemporal || fromLogs || '').trim();
 
         // Resolve user/job context
         const ctx = jobId ? this.jobCtxById.get(String(jobId)) : undefined;
